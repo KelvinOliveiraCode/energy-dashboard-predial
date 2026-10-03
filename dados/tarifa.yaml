@@ -1,0 +1,11 @@
+# Tarifa ficticia do energy-dashboard-predial.
+# Valores inventados para demonstracao; nao usar como referencia comercial.
+# Fictitious tariff; invented values for demonstration, not a commercial reference.
+moeda: BRL
+preco_ponta: 0.9874
+preco_fora_ponta: 0.6432
+hora_ponta_inicio: "17:00"
+hora_ponta_fim: "23:00"
+# 0=segunda, 1=terca, ..., 4=sexta (0=Monday, 1=Tuesday, ..., 4=Friday)
+dias_ponta: [0, 1, 2, 3, 4]
+taxa_fixa_mensal: 78.45

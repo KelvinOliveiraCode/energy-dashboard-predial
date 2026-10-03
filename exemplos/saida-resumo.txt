@@ -1,0 +1,18 @@
+RELATORIO DE CONSUMO - energy-dashboard-predial
+================================================
+Periodo: 2026-06-01 a 2026-08-29 (90 dias)
+Andares: 3 (andar-1, andar-2, andar-3)
+Total: 14630.8 kWh
+Custo estimado: BRL 10479.69 (ponta: BRL 3067.15 | fora de ponta: BRL 7412.54)
+Demanda: 15.60 kW | Fator de carga: 0.43
+Metodo: mesmo horario da semana anterior + mesmo mes anterior | Limiar: 50% acima | margem minima 0.15 kWh
+
+Consumo por andar:
+  andar-1: 9286.7 kWh | custo BRL 6648.60 | media 103.2 kWh/dia
+  andar-2: 2082.5 kWh | custo BRL 1509.97 | media 23.1 kWh/dia
+  andar-3: 3261.6 kWh | custo BRL 2321.11 | media 36.2 kWh/dia
+
+Desvios detectados: 3
+  1. andar-2 | 2026-06-26T20:00 a 2026-06-26T22:45 (2.8 h, 12 intervalos) | pico 3.90 kWh (+1058% da linha de base)
+  2. andar-3 | 2026-07-26T22:00 a 2026-08-03T05:45 (175.8 h, 256 intervalos) | pico 2.41 kWh (+1328% da linha de base)
+  3. andar-1 | 2026-08-17T00:00 a 2026-08-29T23:45 (311.8 h, 1246 intervalos) | pico 3.52 kWh (+279% da linha de base)

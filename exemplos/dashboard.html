@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENERGYDASH - Painel de Consumo Predial</title>
+<style>
+:root {
+  --preto: #000000;
+  --branco: #FFFFFF;
+  --g900: #0A0A0B;
+  --g800: #141416;
+  --g700: #1F2023;
+  --g600: #2E3034;
+  --g400: #6B6E74;
+  --g300: #9A9DA3;
+  --vermelho: #D32F2F;
+  --azul: #2563EB;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--g900);
+  color: var(--branco);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 300;
+}
+.container { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; }
+header { margin-bottom: 20px; }
+h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 200;
+  letter-spacing: 0.22em;
+}
+h1 .marca { color: var(--azul); font-weight: 400; }
+.sub { margin: 6px 0 0; color: var(--g300); font-size: 13px; }
+.metodo { color: var(--g400); font-size: 12px; margin-top: 4px; }
+.card {
+  background: var(--g800);
+  border: 1px solid var(--g700);
+  border-radius: 8px;
+  padding: 18px 18px 14px;
+  margin-bottom: 16px;
+}
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--g300);
+}
+.metricas { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.metrica {
+  background: var(--g800);
+  border: 1px solid var(--g700);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 160px;
+}
+.metrica .valor { font-size: 24px; font-weight: 300; }
+.metrica .rotulo {
+  color: var(--g300);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.metrica.alerta .valor { color: var(--vermelho); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  color: var(--g300);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--g600);
+}
+td { padding: 8px; border-bottom: 1px solid var(--g700); }
+td.dir, th.dir { text-align: right; }
+.alerta { color: var(--vermelho); }
+canvas { width: 100%; height: auto; display: block; }
+.legenda { margin-top: 8px; font-size: 12px; color: var(--g300); }
+.legenda span { display: inline-block; margin-right: 14px; }
+.legenda i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+.andar-bloco { margin-bottom: 18px; }
+.andar-bloco h3 { margin: 0 0 2px; font-size: 16px; font-weight: 300; }
+.andar-bloco .linha { color: var(--g300); font-size: 12px; margin-bottom: 8px; }
+footer { color: var(--g400); font-size: 11px; margin-top: 22px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><span class="marca">ENERGY</span>DASH</h1>
+    <p class="sub" id="periodo"></p>
+    <p class="metodo" id="metodo"></p>
+  </header>
+
+  <section class="metricas" id="metricas"></section>
+
+  <section class="card">
+    <h2>Consumo diario por andar (90 dias)</h2>
+    <div id="graficos-diario"></div>
+  </section>
+
+  <section class="card">
+    <h2>Perfil horario (media de kWh por hora)</h2>
+    <canvas id="grafico-horario" width="1000" height="240"></canvas>
+    <div class="legenda" id="legenda-horario"></div>
+  </section>
+
+  <section class="card">
+    <h2>Desvios detectados</h2>
+    <table id="tabela-desvios"></table>
+  </section>
+
+  <section class="card">
+    <h2>Custo estimado</h2>
+    <table id="tabela-custo"></table>
+  </section>
+
+  <footer>
+    Dados ficticios gerados por tools/gerar_dados.py (seed fixa) &middot;
+    relatorio estatico, sem CDN, abre offline &middot;
+    energia predial por andar, setor e horario
+  </footer>
+</div>
+<script>
+"use strict";
+const DADOS = {"andares": ["andar-1", "andar-2", "andar-3"], "app": "energy-dashboard-predial", "custo": {"banda_ponta": "seg/ter/qua/qui/sex, 17h-22h", "custo_fora_ponta": 7412.54, "custo_ponta": 3067.15, "fora_ponta_kwh": 11524.47, "moeda": "BRL", "ponta_kwh": 3106.29, "taxa_fixa_mensal": 78.45, "total_custo": 10479.69}, "desvios": [{"andar": "andar-2", "duracao_horas": 2.8, "fim": "2026-06-26T22:45", "inicio": "2026-06-26T20:00", "intervalos": 12, "media_percentual": 2303.0, "pico_kwh": 3.9, "pico_percentual": 1057.8}, {"andar": "andar-3", "duracao_horas": 175.8, "fim": "2026-08-03T05:45", "inicio": "2026-07-26T22:00", "intervalos": 256, "media_percentual": 1162.3, "pico_kwh": 2.41, "pico_percentual": 1327.5}, {"andar": "andar-1", "duracao_horas": 311.8, "fim": "2026-08-29T23:45", "inicio": "2026-08-17T00:00", "intervalos": 1246, "media_percentual": 214.7, "pico_kwh": 3.52, "pico_percentual": 279.3}], "geral": {"demanda_kw": 15.6, "desvios": 3, "fator_de_carga": 0.434, "total_kwh": 14630.75}, "metodo": {"limiar_percentual": 50.0, "linha_base": "mesmo horario da semana anterior + mesmo mes anterior", "margem_minima_kwh": 0.15}, "perfil_horario": {"andar-1": [0.886, 0.883, 0.884, 0.882, 0.88, 0.883, 1.029, 1.029, 1.021, 1.027, 1.166, 1.17, 1.177, 1.168, 1.171, 1.172, 1.169, 1.268, 1.274, 1.265, 1.267, 1.265, 0.931, 0.929], "andar-2": [0.068, 0.068, 0.067, 0.068, 0.068, 0.068, 0.211, 0.213, 0.213, 0.383, 0.38, 0.379, 0.381, 0.38, 0.381, 0.379, 0.382, 0.382, 0.299, 0.298, 0.334, 0.141, 0.14, 0.102], "andar-3": [0.325, 0.325, 0.325, 0.325, 0.324, 0.324, 0.258, 0.258, 0.258, 0.47, 0.478, 0.472, 0.473, 0.476, 0.476, 0.472, 0.471, 0.476, 0.341, 0.343, 0.343, 0.345, 0.352, 0.35]}, "periodo": {"dias": 90, "fim": "2026-08-29T23:45", "inicio": "2026-06-01T00:00"}, "por_andar": {"andar-1": {"custo": 6648.6, "custo_ponta": 1937.46, "kwh": 9286.72, "media_diaria_kwh": 103.19, "serie_diaria": [{"dia": "2026-06-01", "kwh": 72.15}, {"dia": "2026-06-02", "kwh": 72.42}, {"dia": "2026-06-03", "kwh": 71.31}, {"dia": "2026-06-04", "kwh": 71.47}, {"dia": "2026-06-05", "kwh": 70.84}, {"dia": "2026-06-06", "kwh": 65.82}, {"dia": "2026-06-07", "kwh": 63.96}, {"dia": "2026-06-08", "kwh": 71.86}, {"dia": "2026-06-09", "kwh": 72.03}, {"dia": "2026-06-10", "kwh": 71.8}, {"dia": "2026-06-11", "kwh": 72.37}, {"dia": "2026-06-12", "kwh": 71.07}, {"dia": "2026-06-13", "kwh": 65.92}, {"dia": "2026-06-14", "kwh": 64.91}, {"dia": "2026-06-15", "kwh": 72.48}, {"dia": "2026-06-16", "kwh": 71.59}, {"dia": "2026-06-17", "kwh": 71.19}, {"dia": "2026-06-18", "kwh": 72.0}, {"dia": "2026-06-19", "kwh": 71.99}, {"dia": "2026-06-20", "kwh": 64.92}, {"dia": "2026-06-21", "kwh": 64.6}, {"dia": "2026-06-22", "kwh": 71.99}, {"dia": "2026-06-23", "kwh": 72.19}, {"dia": "2026-06-24", "kwh": 71.49}, {"dia": "2026-06-25", "kwh": 72.3}, {"dia": "2026-06-26", "kwh": 70.61}, {"dia": "2026-06-27", "kwh": 65.33}, {"dia": "2026-06-28", "kwh": 64.77}, {"dia": "2026-06-29", "kwh": 71.17}, {"dia": "2026-06-30", "kwh": 71.01}, {"dia": "2026-07-01", "kwh": 72.47}, {"dia": "2026-07-02", "kwh": 73.24}, {"dia": "2026-07-03", "kwh": 71.57}, {"dia": "2026-07-04", "kwh": 65.27}, {"dia": "2026-07-05", "kwh": 64.32}, {"dia": "2026-07-06", "kwh": 71.88}, {"dia": "2026-07-07", "kwh": 70.73}, {"dia": "2026-07-08", "kwh": 71.75}, {"dia": "2026-07-09", "kwh": 72.09}, {"dia": "2026-07-10", "kwh": 72.11}, {"dia": "2026-07-11", "kwh": 64.6}, {"dia": "2026-07-12", "kwh": 64.14}, {"dia": "2026-07-13", "kwh": 72.41}, {"dia": "2026-07-14", "kwh": 72.22}, {"dia": "2026-07-15", "kwh": 71.68}, {"dia": "2026-07-16", "kwh": 73.27}, {"dia": "2026-07-17", "kwh": 71.3}, {"dia": "2026-07-18", "kwh": 65.13}, {"dia": "2026-07-19", "kwh": 65.42}, {"dia": "2026-07-20", "kwh": 69.99}, {"dia": "2026-07-21", "kwh": 72.04}, {"dia": "2026-07-22", "kwh": 72.95}, {"dia": "2026-07-23", "kwh": 72.91}, {"dia": "2026-07-24", "kwh": 70.55}, {"dia": "2026-07-25", "kwh": 65.51}, {"dia": "2026-07-26", "kwh": 65.55}, {"dia": "2026-07-27", "kwh": 72.22}, {"dia": "2026-07-28", "kwh": 72.24}, {"dia": "2026-07-29", "kwh": 72.27}, {"dia": "2026-07-30", "kwh": 71.93}, {"dia": "2026-07-31", "kwh": 72.34}, {"dia": "2026-08-01", "kwh": 64.72}, {"dia": "2026-08-02", "kwh": 64.72}, {"dia": "2026-08-03", "kwh": 71.67}, {"dia": "2026-08-04", "kwh": 70.6}, {"dia": "2026-08-05", "kwh": 71.94}, {"dia": "2026-08-06", "kwh": 71.12}, {"dia": "2026-08-07", "kwh": 72.08}, {"dia": "2026-08-08", "kwh": 64.56}, {"dia": "2026-08-09", "kwh": 65.34}, {"dia": "2026-08-10", "kwh": 72.29}, {"dia": "2026-08-11", "kwh": 71.42}, {"dia": "2026-08-12", "kwh": 71.89}, {"dia": "2026-08-13", "kwh": 71.98}, {"dia": "2026-08-14", "kwh": 71.63}, {"dia": "2026-08-15", "kwh": 64.24}, {"dia": "2026-08-16", "kwh": 63.97}, {"dia": "2026-08-17", "kwh": 303.49}, {"dia": "2026-08-18", "kwh": 301.51}, {"dia": "2026-08-19", "kwh": 302.26}, {"dia": "2026-08-20", "kwh": 303.25}, {"dia": "2026-08-21", "kwh": 302.59}, {"dia": "2026-08-22", "kwh": 294.32}, {"dia": "2026-08-23", "kwh": 294.99}, {"dia": "2026-08-24", "kwh": 302.82}, {"dia": "2026-08-25", "kwh": 301.78}, {"dia": "2026-08-26", "kwh": 302.39}, {"dia": "2026-08-27", "kwh": 302.4}, {"dia": "2026-08-28", "kwh": 302.31}, {"dia": "2026-08-29", "kwh": 294.84}]}, "andar-2": {"custo": 1509.97, "custo_ponta": 489.16, "kwh": 2082.48, "media_diaria_kwh": 23.14, "serie_diaria": [{"dia": "2026-06-01", "kwh": 27.33}, {"dia": "2026-06-02", "kwh": 26.78}, {"dia": "2026-06-03", "kwh": 26.5}, {"dia": "2026-06-04", "kwh": 26.94}, {"dia": "2026-06-05", "kwh": 26.51}, {"dia": "2026-06-06", "kwh": 12.13}, {"dia": "2026-06-07", "kwh": 12.06}, {"dia": "2026-06-08", "kwh": 26.66}, {"dia": "2026-06-09", "kwh": 27.21}, {"dia": "2026-06-10", "kwh": 27.23}, {"dia": "2026-06-11", "kwh": 27.04}, {"dia": "2026-06-12", "kwh": 26.35}, {"dia": "2026-06-13", "kwh": 11.95}, {"dia": "2026-06-14", "kwh": 12.13}, {"dia": "2026-06-15", "kwh": 26.59}, {"dia": "2026-06-16", "kwh": 26.84}, {"dia": "2026-06-17", "kwh": 26.52}, {"dia": "2026-06-18", "kwh": 26.92}, {"dia": "2026-06-19", "kwh": 26.57}, {"dia": "2026-06-20", "kwh": 12.12}, {"dia": "2026-06-21", "kwh": 11.97}, {"dia": "2026-06-22", "kwh": 26.62}, {"dia": "2026-06-23", "kwh": 26.61}, {"dia": "2026-06-24", "kwh": 26.95}, {"dia": "2026-06-25", "kwh": 26.78}, {"dia": "2026-06-26", "kwh": 68.89}, {"dia": "2026-06-27", "kwh": 12.18}, {"dia": "2026-06-28", "kwh": 12.12}, {"dia": "2026-06-29", "kwh": 26.86}, {"dia": "2026-06-30", "kwh": 26.87}, {"dia": "2026-07-01", "kwh": 26.49}, {"dia": "2026-07-02", "kwh": 26.66}, {"dia": "2026-07-03", "kwh": 26.76}, {"dia": "2026-07-04", "kwh": 12.03}, {"dia": "2026-07-05", "kwh": 12.0}, {"dia": "2026-07-06", "kwh": 27.01}, {"dia": "2026-07-07", "kwh": 26.51}, {"dia": "2026-07-08", "kwh": 26.62}, {"dia": "2026-07-09", "kwh": 26.89}, {"dia": "2026-07-10", "kwh": 27.13}, {"dia": "2026-07-11", "kwh": 11.99}, {"dia": "2026-07-12", "kwh": 12.08}, {"dia": "2026-07-13", "kwh": 26.42}, {"dia": "2026-07-14", "kwh": 27.02}, {"dia": "2026-07-15", "kwh": 26.94}, {"dia": "2026-07-16", "kwh": 26.9}, {"dia": "2026-07-17", "kwh": 26.79}, {"dia": "2026-07-18", "kwh": 11.86}, {"dia": "2026-07-19", "kwh": 12.02}, {"dia": "2026-07-20", "kwh": 26.69}, {"dia": "2026-07-21", "kwh": 26.81}, {"dia": "2026-07-22", "kwh": 26.23}, {"dia": "2026-07-23", "kwh": 26.79}, {"dia": "2026-07-24", "kwh": 27.03}, {"dia": "2026-07-25", "kwh": 12.21}, {"dia": "2026-07-26", "kwh": 11.93}, {"dia": "2026-07-27", "kwh": 27.23}, {"dia": "2026-07-28", "kwh": 26.9}, {"dia": "2026-07-29", "kwh": 26.85}, {"dia": "2026-07-30", "kwh": 26.89}, {"dia": "2026-07-31", "kwh": 26.86}, {"dia": "2026-08-01", "kwh": 11.99}, {"dia": "2026-08-02", "kwh": 12.15}, {"dia": "2026-08-03", "kwh": 26.76}, {"dia": "2026-08-04", "kwh": 26.57}, {"dia": "2026-08-05", "kwh": 26.3}, {"dia": "2026-08-06", "kwh": 26.95}, {"dia": "2026-08-07", "kwh": 26.87}, {"dia": "2026-08-08", "kwh": 11.97}, {"dia": "2026-08-09", "kwh": 12.11}, {"dia": "2026-08-10", "kwh": 26.65}, {"dia": "2026-08-11", "kwh": 26.62}, {"dia": "2026-08-12", "kwh": 26.54}, {"dia": "2026-08-13", "kwh": 26.71}, {"dia": "2026-08-14", "kwh": 26.83}, {"dia": "2026-08-15", "kwh": 12.15}, {"dia": "2026-08-16", "kwh": 12.15}, {"dia": "2026-08-17", "kwh": 27.09}, {"dia": "2026-08-18", "kwh": 26.62}, {"dia": "2026-08-19", "kwh": 26.43}, {"dia": "2026-08-20", "kwh": 25.98}, {"dia": "2026-08-21", "kwh": 26.69}, {"dia": "2026-08-22", "kwh": 12.1}, {"dia": "2026-08-23", "kwh": 11.94}, {"dia": "2026-08-24", "kwh": 26.61}, {"dia": "2026-08-25", "kwh": 27.07}, {"dia": "2026-08-26", "kwh": 26.67}, {"dia": "2026-08-27", "kwh": 26.52}, {"dia": "2026-08-28", "kwh": 26.5}, {"dia": "2026-08-29", "kwh": 12.19}]}, "andar-3": {"custo": 2321.11, "custo_ponta": 640.52, "kwh": 3261.55, "media_diaria_kwh": 36.24, "serie_diaria": [{"dia": "2026-06-01", "kwh": 34.6}, {"dia": "2026-06-02", "kwh": 35.22}, {"dia": "2026-06-03", "kwh": 34.63}, {"dia": "2026-06-04", "kwh": 34.58}, {"dia": "2026-06-05", "kwh": 34.71}, {"dia": "2026-06-06", "kwh": 17.36}, {"dia": "2026-06-07", "kwh": 17.59}, {"dia": "2026-06-08", "kwh": 34.3}, {"dia": "2026-06-09", "kwh": 34.57}, {"dia": "2026-06-10", "kwh": 35.11}, {"dia": "2026-06-11", "kwh": 34.81}, {"dia": "2026-06-12", "kwh": 34.76}, {"dia": "2026-06-13", "kwh": 17.41}, {"dia": "2026-06-14", "kwh": 17.42}, {"dia": "2026-06-15", "kwh": 34.66}, {"dia": "2026-06-16", "kwh": 35.03}, {"dia": "2026-06-17", "kwh": 34.39}, {"dia": "2026-06-18", "kwh": 34.23}, {"dia": "2026-06-19", "kwh": 34.92}, {"dia": "2026-06-20", "kwh": 17.54}, {"dia": "2026-06-21", "kwh": 17.34}, {"dia": "2026-06-22", "kwh": 34.56}, {"dia": "2026-06-23", "kwh": 35.36}, {"dia": "2026-06-24", "kwh": 34.55}, {"dia": "2026-06-25", "kwh": 34.33}, {"dia": "2026-06-26", "kwh": 35.44}, {"dia": "2026-06-27", "kwh": 17.58}, {"dia": "2026-06-28", "kwh": 17.53}, {"dia": "2026-06-29", "kwh": 35.3}, {"dia": "2026-06-30", "kwh": 34.85}, {"dia": "2026-07-01", "kwh": 35.08}, {"dia": "2026-07-02", "kwh": 34.21}, {"dia": "2026-07-03", "kwh": 34.42}, {"dia": "2026-07-04", "kwh": 17.45}, {"dia": "2026-07-05", "kwh": 17.7}, {"dia": "2026-07-06", "kwh": 34.26}, {"dia": "2026-07-07", "kwh": 34.85}, {"dia": "2026-07-08", "kwh": 34.56}, {"dia": "2026-07-09", "kwh": 34.87}, {"dia": "2026-07-10", "kwh": 34.78}, {"dia": "2026-07-11", "kwh": 17.25}, {"dia": "2026-07-12", "kwh": 17.3}, {"dia": "2026-07-13", "kwh": 34.91}, {"dia": "2026-07-14", "kwh": 35.58}, {"dia": "2026-07-15", "kwh": 34.39}, {"dia": "2026-07-16", "kwh": 34.79}, {"dia": "2026-07-17", "kwh": 35.11}, {"dia": "2026-07-18", "kwh": 17.73}, {"dia": "2026-07-19", "kwh": 17.37}, {"dia": "2026-07-20", "kwh": 35.41}, {"dia": "2026-07-21", "kwh": 34.44}, {"dia": "2026-07-22", "kwh": 35.05}, {"dia": "2026-07-23", "kwh": 35.12}, {"dia": "2026-07-24", "kwh": 35.13}, {"dia": "2026-07-25", "kwh": 17.5}, {"dia": "2026-07-26", "kwh": 34.93}, {"dia": "2026-07-27", "kwh": 105.11}, {"dia": "2026-07-28", "kwh": 105.11}, {"dia": "2026-07-29", "kwh": 104.79}, {"dia": "2026-07-30", "kwh": 104.77}, {"dia": "2026-07-31", "kwh": 105.04}, {"dia": "2026-08-01", "kwh": 87.99}, {"dia": "2026-08-02", "kwh": 87.57}, {"dia": "2026-08-03", "kwh": 87.95}, {"dia": "2026-08-04", "kwh": 34.81}, {"dia": "2026-08-05", "kwh": 34.31}, {"dia": "2026-08-06", "kwh": 34.82}, {"dia": "2026-08-07", "kwh": 34.61}, {"dia": "2026-08-08", "kwh": 17.13}, {"dia": "2026-08-09", "kwh": 17.23}, {"dia": "2026-08-10", "kwh": 35.55}, {"dia": "2026-08-11", "kwh": 34.66}, {"dia": "2026-08-12", "kwh": 35.22}, {"dia": "2026-08-13", "kwh": 34.41}, {"dia": "2026-08-14", "kwh": 35.29}, {"dia": "2026-08-15", "kwh": 17.41}, {"dia": "2026-08-16", "kwh": 17.23}, {"dia": "2026-08-17", "kwh": 34.9}, {"dia": "2026-08-18", "kwh": 34.25}, {"dia": "2026-08-19", "kwh": 35.37}, {"dia": "2026-08-20", "kwh": 34.93}, {"dia": "2026-08-21", "kwh": 35.19}, {"dia": "2026-08-22", "kwh": 17.52}, {"dia": "2026-08-23", "kwh": 17.53}, {"dia": "2026-08-24", "kwh": 34.89}, {"dia": "2026-08-25", "kwh": 34.52}, {"dia": "2026-08-26", "kwh": 34.81}, {"dia": "2026-08-27", "kwh": 34.99}, {"dia": "2026-08-28", "kwh": 35.01}, {"dia": "2026-08-29", "kwh": 17.73}]}}};
+
+/* Paleta: azul para dado, cinza para estrutura, vermelho para alerta.
+   Palette: blue for data, gray for structure, red for alerts. */
+const CORES = ["#2563EB", "#9A9DA3", "#E8E9EB"];
+const corDoAndar = {};
+DADOS.andares.forEach(function (a, i) { corDoAndar[a] = CORES[i % CORES.length]; });
+
+function milhar(v, casas) {
+  const neg = v < 0 ? "-" : "";
+  const partes = Math.abs(v).toFixed(casas).split(".");
+  partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return neg + partes.join(",");
+}
+
+function dataISO() {
+  return {
+    inicio: new Date(DADOS.periodo.inicio),
+    fim: new Date(DADOS.periodo.fim),
+    dias: DADOS.periodo.dias
+  };
+}
+
+function desenharLinhaDiario(idCanvas, andar) {
+  const c = document.getElementById(idCanvas);
+  const ctx = c.getContext("2d");
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const m = { e: 48, d: 14, t: 16, b: 28 };
+  const iw = W - m.e - m.d;
+  const ih = H - m.t - m.b;
+  const dias = DADOS.por_andar[andar].serie_diaria;
+  let maxV = 0;
+  dias.forEach(function (p) { if (p.kwh > maxV) maxV = p.kwh; });
+  maxV = maxV * 1.06 || 1;
+  const p = dataISO();
+
+  /* Bandas vermelhas dos desvios deste andar.
+     Red bands for this floor's deviations. */
+  DADOS.desvios.forEach(function (d) {
+    if (d.andar !== andar) return;
+    const i0 = (new Date(d.inicio) - p.inicio) / 86400000;
+    const i1 = (new Date(d.fim) - p.inicio) / 86400000 + 1;
+    const x0 = m.e + Math.max(0, i0) / p.dias * iw;
+    const x1 = m.e + Math.min(p.dias, i1) / p.dias * iw;
+    ctx.fillStyle = "rgba(211, 47, 47, 0.13)";
+    ctx.fillRect(x0, m.t, Math.max(2, x1 - x0), ih);
+  });
+
+  /* Grade horizontal com rotulos. / Horizontal grid with labels. */
+  ctx.strokeStyle = "#2E3034";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#9A9DA3";
+  ctx.font = "11px Consolas, monospace";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const y = m.t + (ih * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(m.e, y);
+    ctx.lineTo(m.e + iw, y);
+    ctx.stroke();
+    ctx.fillText((maxV - (maxV * i) / 4).toFixed(1), m.e - 6, y + 3);
+  }
+
+  /* Linha de consumo. / Consumption line. */
+  ctx.strokeStyle = corDoAndar[andar];
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  dias.forEach(function (pt, i) {
+    const x = m.e + (i / (dias.length - 1)) * iw;
+    const y = m.t + ih - (pt.kwh / maxV) * ih;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  /* Rotulos de data a cada 15 dias. / Date labels every 15 days. */
+  ctx.textAlign = "center";
+  for (let i = 0; i < dias.length; i += 15) {
+    const x = m.e + (i / (dias.length - 1)) * iw;
+    ctx.fillText(dias[i].dia.slice(5), x, H - 8);
+  }
+}
+
+function desenharHorario() {
+  const c = document.getElementById("grafico-horario");
+  const ctx = c.getContext("2d");
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const m = { e: 48, d: 14, t: 14, b: 26 };
+  const iw = W - m.e - m.d;
+  const ih = H - m.t - m.b;
+  let maxV = 0;
+  DADOS.andares.forEach(function (a) {
+    DADOS.perfil_horario[a].forEach(function (v) { if (v > maxV) maxV = v; });
+  });
+  maxV = maxV * 1.08 || 1;
+
+  ctx.strokeStyle = "#2E3034";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#9A9DA3";
+  ctx.font = "11px Consolas, monospace";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const y = m.t + (ih * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(m.e, y);
+    ctx.lineTo(m.e + iw, y);
+    ctx.stroke();
+    ctx.fillText((maxV - (maxV * i) / 4).toFixed(2), m.e - 6, y + 3);
+  }
+  ctx.textAlign = "center";
+  for (let h = 0; h < 24; h += 4) {
+    const x = m.e + (h / 23) * iw;
+    ctx.fillText(h + "h", x, H - 8);
+  }
+
+  DADOS.andares.forEach(function (a) {
+    const serie = DADOS.perfil_horario[a];
+    ctx.strokeStyle = corDoAndar[a];
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    serie.forEach(function (v, i) {
+      const x = m.e + (i / 23) * iw;
+      const y = m.t + ih - (v / maxV) * ih;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+}
+
+function montarLayoute() {
+  const el = document.getElementById("tabela-desvios");
+  const cab = "<thead><tr>" +
+    "<th>Andar</th><th>Periodo</th><th class='dir'>Duracao</th>" +
+    "<th class='dir'>Intervalos</th><th class='dir'>Pico</th>" +
+    "<th class='dir'>Pico vs linha de base</th><th class='dir'>Media vs linha de base</th>" +
+    "</tr></thead>";
+  let corpo = "<tbody>";
+  if (DADOS.desvios.length === 0) {
+    corpo += "<tr><td colspan='7'>nenhum desvio no periodo / no deviation in the period</td></tr>";
+  }
+  DADOS.desvios.forEach(function (d) {
+    corpo += "<tr>" +
+      "<td>" + d.andar + "</td>" +
+      "<td>" + d.inicio.slice(0, 16) + " a " + d.fim.slice(0, 16) + "</td>" +
+      "<td class='dir'>" + d.duracao_horas.toFixed(1) + " h</td>" +
+      "<td class='dir'>" + d.intervalos + "</td>" +
+      "<td class='dir alert'>" + d.pico_kwh.toFixed(2) + " kWh</td>" +
+      "<td class='dir alerta'>+" + d.pico_percentual.toFixed(0) + "%</td>" +
+      "<td class='dir'>+" + d.media_percentual.toFixed(0) + "%</td>" +
+      "</tr>";
+  });
+  corpo += "</tbody>";
+  el.innerHTML = cab + corpo;
+}
+
+function montarCusto() {
+  const c = DADOS.custo;
+  const el = document.getElementById("tabela-custo");
+  const linhas = [
+    ["Banda ponta (" + c.banda_ponta + ")", c.ponta_kwh, c.custo_ponta],
+    ["Banda fora de ponta", c.fora_ponta_kwh, c.custo_fora_ponta],
+    ["Total", c.ponta_kwh + c.fora_ponta_kwh, c.total_custo],
+    ["Taxa fixa mensal", null, c.taxa_fixa_mensal]
+  ];
+  let html = "<thead><tr><th>Banda</th><th class='dir'>kWh</th><th class='dir'>Custo</th></tr></thead><tbody>";
+  linhas.forEach(function (l) {
+    html += "<tr><td>" + l[0] + "</td>" +
+      "<td class='dir'>" + (l[1] === null ? "-" : milhar(l[1], 1)) + "</td>" +
+      "<td class='dir'>" + c.moeda + " " + milhar(l[2], 2) + "</td></tr>";
+  });
+  html += "</tbody>";
+  el.innerHTML = html;
+}
+
+function montarMetricas() {
+  const g = DADOS.geral;
+  const c = DADOS.custo;
+  const el = document.getElementById("metricas");
+  const itens = [
+    { v: milhar(g.total_kwh, 1) + " kWh", r: "Energia no periodo", a: false },
+    { v: c.moeda + " " + milhar(c.total_custo, 2), r: "Custo estimado", a: false },
+    { v: milhar(g.demanda_kw, 2) + " kW", r: "Demanda (maior kW)", a: false },
+    { v: g.fator_de_carga.toFixed(2), r: "Fator de carga", a: false },
+    { v: String(g.desvios), r: "Desvios detectados", a: g.desvios > 0 }
+  ];
+  el.innerHTML = itens.map(function (it) {
+    return "<div class='metrica" + (it.a ? " alerta" : "") + "'>" +
+      "<div class='valor'>" + it.v + "</div>" +
+      "<div class='rotulo'>" + it.r + "</div></div>";
+  }).join("");
+}
+
+function montarAndares() {
+  const el = document.getElementById("graficos-diario");
+  DADOS.andares.forEach(function (a, i) {
+    const p = DADOS.por_andar[a];
+    const bloco = document.createElement("div");
+    bloco.className = "andar-bloco";
+    bloco.innerHTML =
+      "<h3><i style='display:inline-block;width:10px;height:10px;border-radius:2px;background:" + corDoAndar[a] + ";margin-right:8px'></i>" + a + "</h3>" +
+      "<div class='linha'>" + milhar(p.kwh, 1) + " kWh no periodo | media " +
+      p.media_diaria_kwh.toFixed(1) + " kWh/dia | custo " +
+      DADOS.custo.moeda + " " + milhar(p.custo, 2) + "</div>" +
+      "<canvas id='canvas-dia-" + i + "' width='1000' height='250'></canvas>";
+    el.appendChild(bloco);
+  });
+  DADOS.andares.forEach(function (a, i) {
+    desenharLinhaDiario("canvas-dia-" + i, a);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  document.getElementById("periodo").textContent =
+    DADOS.periodo.inicio.slice(0, 10) + " a " + DADOS.periodo.fim.slice(0, 10) +
+    " (" + DADOS.periodo.dias + " dias, leituras de 15 em 15 min, " + DADOS.andares.length + " andares)";
+  document.getElementById("metodo").textContent =
+    "Linha de base: " + DADOS.metodo.linha_base.toLowerCase() +
+    " | Limiar: " + DADOS.metodo.limiar_percentual.toFixed(0) +
+    "% acima, margem minima " + DADOS.metodo.margem_minima_kwh.toFixed(2) + " kWh por intervalo";
+  montarMetricas();
+  montarAndares();
+  desenharHorario();
+  const leg = document.getElementById("legenda-horario");
+  leg.innerHTML = DADOS.andares.map(function (a) {
+    return "<span><i style='background:" + corDoAndar[a] + "'></i>" + a + "</span>";
+  }).join("");
+  montarLayoute();
+  montarCusto();
+});
+</script>
+</body>
+</html>

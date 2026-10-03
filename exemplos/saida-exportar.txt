@@ -1,0 +1,2 @@
+Relatorio em exemplos\dashboard.html / Report at exemplos\dashboard.html
+Abra o arquivo no navegador (funciona offline, sem CDN) / Open the file in a browser (works offline, no CDN)

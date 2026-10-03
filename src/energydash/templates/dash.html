@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENERGYDASH - Painel de Consumo Predial</title>
+<style>
+:root {
+  --preto: #000000;
+  --branco: #FFFFFF;
+  --g900: #0A0A0B;
+  --g800: #141416;
+  --g700: #1F2023;
+  --g600: #2E3034;
+  --g400: #6B6E74;
+  --g300: #9A9DA3;
+  --vermelho: #D32F2F;
+  --azul: #2563EB;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--g900);
+  color: var(--branco);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 300;
+}
+.container { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; }
+header { margin-bottom: 20px; }
+h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 200;
+  letter-spacing: 0.22em;
+}
+h1 .marca { color: var(--azul); font-weight: 400; }
+.sub { margin: 6px 0 0; color: var(--g300); font-size: 13px; }
+.metodo { color: var(--g400); font-size: 12px; margin-top: 4px; }
+.card {
+  background: var(--g800);
+  border: 1px solid var(--g700);
+  border-radius: 8px;
+  padding: 18px 18px 14px;
+  margin-bottom: 16px;
+}
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--g300);
+}
+.metricas { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.metrica {
+  background: var(--g800);
+  border: 1px solid var(--g700);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 160px;
+}
+.metrica .valor { font-size: 24px; font-weight: 300; }
+.metrica .rotulo {
+  color: var(--g300);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.metrica.alerta .valor { color: var(--vermelho); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  color: var(--g300);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--g600);
+}
+td { padding: 8px; border-bottom: 1px solid var(--g700); }
+td.dir, th.dir { text-align: right; }
+.alerta { color: var(--vermelho); }
+canvas { width: 100%; height: auto; display: block; }
+.legenda { margin-top: 8px; font-size: 12px; color: var(--g300); }
+.legenda span { display: inline-block; margin-right: 14px; }
+.legenda i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+.andar-bloco { margin-bottom: 18px; }
+.andar-bloco h3 { margin: 0 0 2px; font-size: 16px; font-weight: 300; }
+.andar-bloco .linha { color: var(--g300); font-size: 12px; margin-bottom: 8px; }
+footer { color: var(--g400); font-size: 11px; margin-top: 22px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><span class="marca">ENERGY</span>DASH</h1>
+    <p class="sub" id="periodo"></p>
+    <p class="metodo" id="metodo"></p>
+  </header>
+
+  <section class="metricas" id="metricas"></section>
+
+  <section class="card">
+    <h2>Consumo diario por andar (90 dias)</h2>
+    <div id="graficos-diario"></div>
+  </section>
+
+  <section class="card">
+    <h2>Perfil horario (media de kWh por hora)</h2>
+    <canvas id="grafico-horario" width="1000" height="240"></canvas>
+    <div class="legenda" id="legenda-horario"></div>
+  </section>
+
+  <section class="card">
+    <h2>Desvios detectados</h2>
+    <table id="tabela-desvios"></table>
+  </section>
+
+  <section class="card">
+    <h2>Custo estimado</h2>
+    <table id="tabela-custo"></table>
+  </section>
+
+  <footer>
+    Dados ficticios gerados por tools/gerar_dados.py (seed fixa) &middot;
+    relatorio estatico, sem CDN, abre offline &middot;
+    energia predial por andar, setor e horario
+  </footer>
+</div>
+<script>
+"use strict";
+const DADOS = __DADOS__;
+
+/* Paleta: azul para dado, cinza para estrutura, vermelho para alerta.
+   Palette: blue for data, gray for structure, red for alerts. */
+const CORES = ["#2563EB", "#9A9DA3", "#E8E9EB"];
+const corDoAndar = {};
+DADOS.andares.forEach(function (a, i) { corDoAndar[a] = CORES[i % CORES.length]; });
+
+function milhar(v, casas) {
+  const neg = v < 0 ? "-" : "";
+  const partes = Math.abs(v).toFixed(casas).split(".");
+  partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return neg + partes.join(",");
+}
+
+function dataISO() {
+  return {
+    inicio: new Date(DADOS.periodo.inicio),
+    fim: new Date(DADOS.periodo.fim),
+    dias: DADOS.periodo.dias
+  };
+}
+
+function desenharLinhaDiario(idCanvas, andar) {
+  const c = document.getElementById(idCanvas);
+  const ctx = c.getContext("2d");
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const m = { e: 48, d: 14, t: 16, b: 28 };
+  const iw = W - m.e - m.d;
+  const ih = H - m.t - m.b;
+  const dias = DADOS.por_andar[andar].serie_diaria;
+  let maxV = 0;
+  dias.forEach(function (p) { if (p.kwh > maxV) maxV = p.kwh; });
+  maxV = maxV * 1.06 || 1;
+  const p = dataISO();
+
+  /* Bandas vermelhas dos desvios deste andar.
+     Red bands for this floor's deviations. */
+  DADOS.desvios.forEach(function (d) {
+    if (d.andar !== andar) return;
+    const i0 = (new Date(d.inicio) - p.inicio) / 86400000;
+    const i1 = (new Date(d.fim) - p.inicio) / 86400000 + 1;
+    const x0 = m.e + Math.max(0, i0) / p.dias * iw;
+    const x1 = m.e + Math.min(p.dias, i1) / p.dias * iw;
+    ctx.fillStyle = "rgba(211, 47, 47, 0.13)";
+    ctx.fillRect(x0, m.t, Math.max(2, x1 - x0), ih);
+  });
+
+  /* Grade horizontal com rotulos. / Horizontal grid with labels. */
+  ctx.strokeStyle = "#2E3034";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#9A9DA3";
+  ctx.font = "11px Consolas, monospace";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const y = m.t + (ih * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(m.e, y);
+    ctx.lineTo(m.e + iw, y);
+    ctx.stroke();
+    ctx.fillText((maxV - (maxV * i) / 4).toFixed(1), m.e - 6, y + 3);
+  }
+
+  /* Linha de consumo. / Consumption line. */
+  ctx.strokeStyle = corDoAndar[andar];
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  dias.forEach(function (pt, i) {
+    const x = m.e + (i / (dias.length - 1)) * iw;
+    const y = m.t + ih - (pt.kwh / maxV) * ih;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  /* Rotulos de data a cada 15 dias. / Date labels every 15 days. */
+  ctx.textAlign = "center";
+  for (let i = 0; i < dias.length; i += 15) {
+    const x = m.e + (i / (dias.length - 1)) * iw;
+    ctx.fillText(dias[i].dia.slice(5), x, H - 8);
+  }
+}
+
+function desenharHorario() {
+  const c = document.getElementById("grafico-horario");
+  const ctx = c.getContext("2d");
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  const m = { e: 48, d: 14, t: 14, b: 26 };
+  const iw = W - m.e - m.d;
+  const ih = H - m.t - m.b;
+  let maxV = 0;
+  DADOS.andares.forEach(function (a) {
+    DADOS.perfil_horario[a].forEach(function (v) { if (v > maxV) maxV = v; });
+  });
+  maxV = maxV * 1.08 || 1;
+
+  ctx.strokeStyle = "#2E3034";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#9A9DA3";
+  ctx.font = "11px Consolas, monospace";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const y = m.t + (ih * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(m.e, y);
+    ctx.lineTo(m.e + iw, y);
+    ctx.stroke();
+    ctx.fillText((maxV - (maxV * i) / 4).toFixed(2), m.e - 6, y + 3);
+  }
+  ctx.textAlign = "center";
+  for (let h = 0; h < 24; h += 4) {
+    const x = m.e + (h / 23) * iw;
+    ctx.fillText(h + "h", x, H - 8);
+  }
+
+  DADOS.andares.forEach(function (a) {
+    const serie = DADOS.perfil_horario[a];
+    ctx.strokeStyle = corDoAndar[a];
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    serie.forEach(function (v, i) {
+      const x = m.e + (i / 23) * iw;
+      const y = m.t + ih - (v / maxV) * ih;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+}
+
+function montarLayoute() {
+  const el = document.getElementById("tabela-desvios");
+  const cab = "<thead><tr>" +
+    "<th>Andar</th><th>Periodo</th><th class='dir'>Duracao</th>" +
+    "<th class='dir'>Intervalos</th><th class='dir'>Pico</th>" +
+    "<th class='dir'>Pico vs linha de base</th><th class='dir'>Media vs linha de base</th>" +
+    "</tr></thead>";
+  let corpo = "<tbody>";
+  if (DADOS.desvios.length === 0) {
+    corpo += "<tr><td colspan='7'>nenhum desvio no periodo / no deviation in the period</td></tr>";
+  }
+  DADOS.desvios.forEach(function (d) {
+    corpo += "<tr>" +
+      "<td>" + d.andar + "</td>" +
+      "<td>" + d.inicio.slice(0, 16) + " a " + d.fim.slice(0, 16) + "</td>" +
+      "<td class='dir'>" + d.duracao_horas.toFixed(1) + " h</td>" +
+      "<td class='dir'>" + d.intervalos + "</td>" +
+      "<td class='dir alert'>" + d.pico_kwh.toFixed(2) + " kWh</td>" +
+      "<td class='dir alerta'>+" + d.pico_percentual.toFixed(0) + "%</td>" +
+      "<td class='dir'>+" + d.media_percentual.toFixed(0) + "%</td>" +
+      "</tr>";
+  });
+  corpo += "</tbody>";
+  el.innerHTML = cab + corpo;
+}
+
+function montarCusto() {
+  const c = DADOS.custo;
+  const el = document.getElementById("tabela-custo");
+  const linhas = [
+    ["Banda ponta (" + c.banda_ponta + ")", c.ponta_kwh, c.custo_ponta],
+    ["Banda fora de ponta", c.fora_ponta_kwh, c.custo_fora_ponta],
+    ["Total", c.ponta_kwh + c.fora_ponta_kwh, c.total_custo],
+    ["Taxa fixa mensal", null, c.taxa_fixa_mensal]
+  ];
+  let html = "<thead><tr><th>Banda</th><th class='dir'>kWh</th><th class='dir'>Custo</th></tr></thead><tbody>";
+  linhas.forEach(function (l) {
+    html += "<tr><td>" + l[0] + "</td>" +
+      "<td class='dir'>" + (l[1] === null ? "-" : milhar(l[1], 1)) + "</td>" +
+      "<td class='dir'>" + c.moeda + " " + milhar(l[2], 2) + "</td></tr>";
+  });
+  html += "</tbody>";
+  el.innerHTML = html;
+}
+
+function montarMetricas() {
+  const g = DADOS.geral;
+  const c = DADOS.custo;
+  const el = document.getElementById("metricas");
+  const itens = [
+    { v: milhar(g.total_kwh, 1) + " kWh", r: "Energia no periodo", a: false },
+    { v: c.moeda + " " + milhar(c.total_custo, 2), r: "Custo estimado", a: false },
+    { v: milhar(g.demanda_kw, 2) + " kW", r: "Demanda (maior kW)", a: false },
+    { v: g.fator_de_carga.toFixed(2), r: "Fator de carga", a: false },
+    { v: String(g.desvios), r: "Desvios detectados", a: g.desvios > 0 }
+  ];
+  el.innerHTML = itens.map(function (it) {
+    return "<div class='metrica" + (it.a ? " alerta" : "") + "'>" +
+      "<div class='valor'>" + it.v + "</div>" +
+      "<div class='rotulo'>" + it.r + "</div></div>";
+  }).join("");
+}
+
+function montarAndares() {
+  const el = document.getElementById("graficos-diario");
+  DADOS.andares.forEach(function (a, i) {
+    const p = DADOS.por_andar[a];
+    const bloco = document.createElement("div");
+    bloco.className = "andar-bloco";
+    bloco.innerHTML =
+      "<h3><i style='display:inline-block;width:10px;height:10px;border-radius:2px;background:" + corDoAndar[a] + ";margin-right:8px'></i>" + a + "</h3>" +
+      "<div class='linha'>" + milhar(p.kwh, 1) + " kWh no periodo | media " +
+      p.media_diaria_kwh.toFixed(1) + " kWh/dia | custo " +
+      DADOS.custo.moeda + " " + milhar(p.custo, 2) + "</div>" +
+      "<canvas id='canvas-dia-" + i + "' width='1000' height='250'></canvas>";
+    el.appendChild(bloco);
+  });
+  DADOS.andares.forEach(function (a, i) {
+    desenharLinhaDiario("canvas-dia-" + i, a);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  document.getElementById("periodo").textContent =
+    DADOS.periodo.inicio.slice(0, 10) + " a " + DADOS.periodo.fim.slice(0, 10) +
+    " (" + DADOS.periodo.dias + " dias, leituras de 15 em 15 min, " + DADOS.andares.length + " andares)";
+  document.getElementById("metodo").textContent =
+    "Linha de base: " + DADOS.metodo.linha_base.toLowerCase() +
+    " | Limiar: " + DADOS.metodo.limiar_percentual.toFixed(0) +
+    "% acima, margem minima " + DADOS.metodo.margem_minima_kwh.toFixed(2) + " kWh por intervalo";
+  montarMetricas();
+  montarAndares();
+  desenharHorario();
+  const leg = document.getElementById("legenda-horario");
+  leg.innerHTML = DADOS.andares.map(function (a) {
+    return "<span><i style='background:" + corDoAndar[a] + "'></i>" + a + "</span>";
+  }).join("");
+  montarLayoute();
+  montarCusto();
+});
+</script>
+</body>
+</html>

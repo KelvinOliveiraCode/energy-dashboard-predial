@@ -1,0 +1,16 @@
+usage: energydash [-h] [--versao] comando ...
+
+Painel local de consumo de energia predial: linha de base, custo estimado,
+desvios e graficos por horario. Local building energy dashboard: baseline,
+estimated cost, deviations and hourly charts.
+
+positional arguments:
+  comando
+    servir    serve o painel em http://127.0.0.1:<porta>; bloqueante, Ctrl+C
+              encerra
+    exportar  gera o relatorio HTML estatico (offline, sem CDN)
+    resumo    imprime o resumo do periodo em texto
+
+options:
+  -h, --help  show this help message and exit
+  --versao    show program's version number and exit
