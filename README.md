@@ -1,122 +1,103 @@
 # energy-dashboard-predial
 
-<div align="center">
-
 [English](README.en.md) · **Português (Brasil)**
 
-</div>
-
-[![Python 3](https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn)](https://scikit-learn.org/) [![pandas](https://img.shields.io/badge/pandas-150458?style=flat-square&logo=pandas)](https://pandas.pydata.org/) [![pytest](https://img.shields.io/badge/pytest-0A9EDC?style=flat-square&logo=pytest)](https://docs.pytest.org/) [![MIT License](https://img.shields.io/badge/License-MIT-f4c430?style=flat-square)](LICENSE)
-
-### Dashboard web local de consumo de energia por andar, com linha de base e desvio
-
----
+[![Python 3](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](#) [![PyYAML](https://img.shields.io/badge/PyYAML-%C3%BAnica%20dep-3776AB?style=flat-square)](#) [![pytest](https://img.shields.io/badge/pytest-74%20testes-0A9EDC?style=flat-square&logo=pytest)](#) [![MIT License](https://img.shields.io/badge/License-MIT-f4c430?style=flat-square)](LICENSE)
 
 ## O que é
 
-Dashboard web local de consumo de energia por andar, com linha de base e desvio
+**Dashboard de energia predial**: leituras de medidores (CSV) → **SQLite**, com análise por **banda tarifária** (fora/intermediária/ponta), **custo do período**, **demanda máxima (kW)**, **fator de carga**, **linha-base** e **detecção de desvios** de consumo. Saída em **JSON**, texto e **HTML** com um servidor http.server embutido. É um laboratório educacional de eficiência energética em prédios.
 
----
+## Status
 
-## Início Rápido
+Laboratório educacional funcional e testado (74 testes).
 
-```bash
-# Clone e entre
-git clone https://github.com/KelvinOliveiraCode/<repo>.git
-cd <repo>
+## Funcionalidades
 
-# Instale dependências
-# Nenhum requirements.txt detectado
+- **Séries** (`serie.py`): `ler_csv` → `Leitura`; `total_kwh`, `por_dia`, `media_por_horario`, `filtrar_por_andar`.
+- **Persistência/consultas** (`consulta.py`): carga em SQLite, `consumo_por_dia`, `consumo_por_andar`, `leituras_periodo`.
+- **Tarifas** (`custo.py`): `Tarifa` por bandas (`banda`), `custo_periodo`, `demanda_kw` e `fator_de_carga` (intervalo de 15 min).
+- **Linha-base** (`linha_base.py`): `PontoLinhaBase`/`LinhaBase` (esperado × observado).
+- **Desvios** (`desvio.py`): `detectar_desvios` com limiar (`excede_limiar`) — aponta períodos fora da linha-base.
+- **Relatórios** (`relatorio.py`): `gerar_html` (template), `exportar_html`, `resumo_em_texto`.
+- **API/resumo** (`api.py`): `montar_resumo` + `resumo_json`.
+- **Servidor** (`servidor.py`): `criar_servidor`/`iniciar_em_thread` para servir o relatório.
+- **CLI** (`energydash`).
 
-# Execute o projeto
-python main.py
+## Arquitetura
 
-# Execute os testes
-pytest
+Pacote `energydash` com camadas puras (serie, consulta, custo, linha_base, desvio, relatorio, api) + servidor http.server.
+
+```mermaid
+flowchart LR
+    CSV[leituras .csv] --> SQ[(SQLite)]
+    SQ --> CB[consumo banda/andar/dia]
+    TAR[tarifa YAML] --> CUSTO[custo + demanda + fator de carga]
+    CUSTO --> RES[montar_resumo]
+    LB[linha-base] --> DESvio[detectar_desvios]
+    RES --> HTML[gerar/exportar HTML]
+    RES --> JSON[resumo_json]
+    HTML --> SERV[http.server]
+    CLI[energydash] --> SQ
 ```
 
-## Como funciona
+## Stack
 
-O projeto é organizado como um **pipeline modular** com etapas independentes:
+- Python ≥ 3.10
+- PyYAML ≥ 6.0 (única dependência; SQLite/HTTP via stdlib)
+- pytest (dev)
 
-- `energydash`
+## Estrutura do repositório
 
-Cada módulo tem responsabilidade única e pode ser testado ou substituído independentemente.
+```
+energy-dashboard-predial/
+├── pyproject.toml · BRIEF.md
+├── src/energydash/
+│   ├── serie.py · consulta.py · custo.py
+│   ├── linha_base.py · desvio.py · relatorio.py
+│   ├── api.py · servidor.py · cli.py
+├── dados/ · templates/
+├── tests/             # 74 testes
+└── LICENSE            # MIT
+```
 
----
+## Pré-requisitos e instalação
 
-## Capacidades
+```bash
+pip install -e .
+```
 
-| Capacidade | Descrição |
-|------------|-------------|
-| Carregamento de Dados | Auto-download do TensorFlow creditcard.csv (284k transações) com cache local |
-| EDA e Visualização | Distribuição de classes, histogramas de Amount, heatmaps de correlação (matplotlib/seaborn) |
-| Pré-processamento | RobustScaler em Amount/Time, split estratificado, remoção de duplicatas |
-| Balanceamento | SMOTE oversampling (fallback: class_weight="balanced") |
-| Modelagem | LogisticRegression, RandomForest, ExtraTrees com RandomizedSearchCV (StratifiedKFold) |
-| Métricas | Accuracy, Precision, Recall, F1, ROC AUC, Specificity, Confusion Matrix |
-| Seleção | Score ponderado: Recall 40% + F1 30% + Precision 20% + Accuracy 10% |
-| Persistência | Serialização joblib para modelo, scaler e resultados completos |
+## Como executar
 
+```bash
+energydash --help
+# subcomando(s) definidos em cli.py (parser como referência)
+```
 
----
+## Testes e qualidade
 
+Comando real (verificado pelo agente):
 
+```bash
+PYTHONPATH=src python -m pytest tests/
+# 74 passed
+```
 
----
+## Decisões técnicas e trade-offs
 
-## Perguntas Frequentes
+- **SQLite via stdlib**: zero serviços externos; análise dedutível por SQL simples.
+- **Demanda por intervalo fixo (15 min)**: padrão da medição predial; fator de carga típico.
+- **Linha-base + desvios**: eficiência transladada a expectativa × observado.
 
-<details>
-<summary><strong>O que é este projeto?</strong></summary>
+## Limitações conhecidas e roadmap
 
-Um estudo/projeto em Python demonstrando conceitos fundamentais.
+- Import só de CSV (sem integrar medidores em tempo real).
+- Um medidor/andar por leitura; sem medição multi-usina consolidada.
 
-</details>
+## Processo de desenvolvimento
 
-<details>
-<summary><strong>Como executar?</strong></summary>
+Projeto individual de Kelvin Oliveira, construído com agentes de IA orquestrados e revisado pelo autor.
 
-Veja [Início Rápido](#início-rápido) para comandos copiáveis.
+## Licença e autor
 
-</details>
-
-<details>
-<summary><strong>Há testes?</strong></summary>
-
-Nenhum teste automatizado neste repositório.
-
-</details>
-
-<details>
-<summary><strong>Posso usar em produção?</strong></summary>
-
-Este é um **projeto de estudo/portfólio**. Revise e endureça (auth, persistência, monitoramento, etc.) antes de usar em produção.
-
-</details>
-
-
-
----
-
-## Documentação
-
-- **Código-Fonte** ,  Navegue pelo diretório `src/` para detalhes de implementação
-- **Referência da API** ,  Docstrings inline + type hints
-- **Diagrama de Arquitetura** ,  Veja [architecture.mermaid](docs/architecture.mermaid) (se presente)
-- **Changelog** ,  [CHANGELOG.md](CHANGELOG.md) (se presente)
-- **Contribuindo** ,  [CONTRIBUTING.md](CONTRIBUTING.md) (se presente)
-
-## Licença
-
-[MIT](LICENSE) ,  Kelvin Oliveira
-
----
-
-<div align="center">
-
-**Construído com** · Python 3 + scikit-learn + pandas
-
-**Autor** · [Kelvin Oliveira](https://github.com/KelvinOliveiraCode) · [Portfolio](https://kelvinoliveiracode.github.io/portfolio/)
-
-</div>
+MIT — Copyright (c) 2026 Kelvin Rebelo de Oliveira. Autor: [Kelvin Oliveira](https://github.com/KelvinOliveiraCode) · [Portfólio](https://kelvinoliveiracode.github.io/portfolio/)
